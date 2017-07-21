@@ -1312,36 +1312,39 @@ cdef void _accumulate_update(
                 else sigma_ptr[k * K + i])
 
 
-def indices(word, list_):
-    ans = []
-    for i, w in enumerate(list_):
-        if w == word:
-            ans.append(i)
-    return ans
-
-
-def get_context_by_index(index, list_, half_window_size=2):
-    left_wind = tuple(list_[max(0, index-half_window_size):index])
-    right_wind = tuple(list_[index+1:index+1+half_window_size])
-    return left_wind + right_wind
-
-
-def get_context_by_token(token, list_, half_window_size):
-    ans = ()
-    for index in indices(token, list_):
-        ans += get_context_by_index(index, list_, half_window_size)
-    return ans
-
-
 def get_contexts(tokens, list_, half_window_size=2):
+    '''
+    Concatenates all contexts for each token in `tokens`.
+    Then removes `tokens` from concatenated contexts.
+    '''
+    def get_context_by_index(index):
+        '''
+        Returns left context and right context for given `index`.
+        '''
+        left_wind = tuple(list_[max(0, index-half_window_size):index])
+        right_wind = tuple(list_[index+1:index+1+half_window_size])
+        return left_wind + right_wind
+
+    def indices(word):
+        '''
+        Returns all indices of occurrences of `word` in `list_`.
+        '''
+        return [i for i, w in enumerate(list_) if w == word]
+
+    def get_context_by_token(token):
+        '''
+        Concatenates each context of `token` into one tuple.
+        '''
+        result = ()
+        for index in indices(token):
+            result += get_context_by_index(index)
+        return ans
+
     ans = ()
     for token in tokens:
-        ans += get_context_by_token(token, list_, half_window_size)
-    tmp = ()
-    for x in ans:
-        if x not in tokens:
-            tmp += (x,)
-    return tmp
+        ans += get_context_by_token(token)
+
+    return tuple(filter(lambda x: x not in tokens, ans))
 
 
 cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
