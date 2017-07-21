@@ -1348,7 +1348,7 @@ def get_contexts(tokens, list_, half_window_size=2):
 
 
 cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
-    text, random_gen, ngram_id_of, uint32_t half_window_size=2,
+    text, random_gen, ngram_id_of, tilda_id_of, uint32_t half_window_size=2,
     uint32_t nsamples_per_word=1, n=2):
     '''
     Take a chunk of text and turn it into a array of pairs for training.
@@ -1464,7 +1464,7 @@ cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
 
         # samples for tildas
         for permut in list(itertools.permutations(cdoc, n)):
-            tilda_id = ngram_id_of(permut)
+            tilda_id = tilda_id_of(permut)
             if tilda_id == -1:
                 # OOV tilda-token
                 continue

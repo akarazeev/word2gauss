@@ -72,7 +72,7 @@ class Vocabulary(object):
     def random_ids(self, num):
         return np.random.randint(0, self._ntokens, size=num).astype(np.uint32)
 
-def iter_pairs(fin, vocab, ngram_id_of, batch_size=10, nsamples=2, window=5):
+def iter_pairs(fin, vocab, ngram_id_of, tilda_id_of, batch_size=10, nsamples=2, window=5):
     '''
     Convert a document stream to batches of pairs used for training embeddings.
     iter_pairs is a generator that yields batches of pairs that can
@@ -98,6 +98,7 @@ def iter_pairs(fin, vocab, ngram_id_of, batch_size=10, nsamples=2, window=5):
 
         pairs = text_to_pairs(text=text, random_gen=vocab.random_ids,
                               nsamples_per_word=nsamples,
-                              half_window_size=window, ngram_id_of=ngram_id_of)
+                              half_window_size=window, ngram_id_of=ngram_id_of,
+                              tilda_id_of=tilda_id_of)
         yield pairs
         batch = list(islice(documents, batch_size))
