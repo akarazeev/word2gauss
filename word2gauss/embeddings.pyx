@@ -49,7 +49,7 @@ import logging
 import time
 import json
 import numpy as np
-import nltk
+import itertools
 
 from tarfile import open as open_tar
 from contextlib import closing
@@ -1312,186 +1312,76 @@ cdef void _accumulate_update(
                 else sigma_ptr[k * K + i])
 
 
-# cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
-#     text, random_gen, uint32_t half_window_size=2,
-#     uint32_t nsamples_per_word=1):
-#     '''
-#     Take a chunk of text and turn it into a array of pairs for training.
-#
-#     The return array pairs is size (npairs, 5).
-#     Each row is one training example.  The first two entries are the
-#     token ids for the positive example and the second two entries
-#     are the token ids for the negative example.  The final entry
-#     is either 0 or 1 with encoding whether the left (0) or right (1)
-#     id is the center word.  For example, this row:
-#         [3, 122, 3, 910, 0]
-#     means: word id's 3 and 122 occur in a context window, word ids 3 and 910
-#     are the negative sample and the 0 signals word 3 is the center word.
-#
-#     text is a list of text documents / sentences.
-#
-#     Each element of the list is a numpy array of uint32_t IDs, with UINT32_MAX
-#     signifying an OOV ID representing the document or sentence.
-#
-#     For position k in the document, uses all contexts from k - half_window_size
-#     to k + half_window_size
-#
-#     random_gen = a callable that returns random IDs:
-#         array of uint32_t length N with random IDs = random_gen(N)
-#     nsamples_per_words = for each positive pair, sample this many negative
-#         pairs
-#     '''
-#     # calculate number of windows we need
-#     # for each token, take all positive indices in half_window_size
-#     # and take two samples from it (one for left token, one for right token)
-#     # for each nsamples_per_word.  Note that this includes full windows
-#     # for words at end, so it slightly overestimates number of pairs
-#     cdef long long npairs = sum(
-#         [2 * len(doc) * half_window_size * nsamples_per_word for doc in text]
-#     )
-#
-#     # allocate pairs and draw random numbers
-#     cdef np.ndarray[uint32_t, ndim=2, mode='c'] pairs = np.empty(
-#         (npairs, 5), dtype=np.uint32)
-#     cdef np.ndarray[uint32_t] randids = random_gen(npairs)
-#     cdef np.ndarray[uint32_t, ndim=1, mode='c'] cdoc
-#
-#     cdef size_t next_pair = 0  # index of next pair to write
-#     cdef size_t i, j, k
-#     cdef uint32_t doc_len
-#
-#     for doc in text:
-#         cdoc = doc
-#         doc_len = cdoc.shape[0]
-#         for i in range(doc_len):
-#             if cdoc[i] == UINT32_MAX:
-#                 # OOV word
-#                 continue
-#             for j in range(i + 1, min(i + half_window_size + 1, doc_len)):
-#                 if cdoc[j] == UINT32_MAX:
-#                     # OOV word
-#                     continue
-#                 # take nsamples_per_word samples
-#                 # we ignore handling the case where sample is i or j, for now
-#                 for k in range(nsamples_per_word):
-#                     # sample j
-#                     pairs[next_pair, 0] = cdoc[i]
-#                     pairs[next_pair, 1] = cdoc[j]
-#                     pairs[next_pair, 2] = cdoc[i]
-#                     pairs[next_pair, 3] = randids[next_pair]
-#                     pairs[next_pair, 4] = 0
-#                     next_pair += 1
-#
-#                     # now sample i
-#                     pairs[next_pair, 0] = cdoc[i]
-#                     pairs[next_pair, 1] = cdoc[j]
-#                     pairs[next_pair, 2] = randids[next_pair]
-#                     pairs[next_pair, 3] = cdoc[j]
-#                     pairs[next_pair, 4] = 1
-#                     next_pair += 1
-#
-#     return np.ascontiguousarray(pairs[:next_pair, :])
+def indices(word, list_):
+    ans = []
+    for i, w in enumerate(list_):
+        if w == word:
+            ans.append(i)
+    return ans
 
-# cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
-#     text, random_gen, tildas, uint32_t half_window_size=2,
-#     uint32_t nsamples_per_word=1):
-#     # calculate number of windows we need
-#     # for each token, take all positive indices in half_window_size
-#     # and take two samples from it (one for left token, one for right token)
-#     # for each nsamples_per_word.  Note that this includes full windows
-#     # for words at end, so it slightly overestimates number of pairs
-#     cdef long long npairs = sum(
-#         [2 * len(doc) * (len(doc) + len(tildas)) * nsamples_per_word for doc in text]
-#     )
-#
-#     print(tildas[0])
-#
-#     # allocate pairs and draw random numbers
-#     cdef np.ndarray[uint32_t, ndim=2, mode='c'] pairs = np.empty(
-#         (npairs, 5), dtype=np.uint32)
-#     cdef np.ndarray[uint32_t] randids = random_gen(npairs)
-#     cdef np.ndarray[uint32_t, ndim=1, mode='c'] cdoc
-#
-#
-#     test = ['a', 'b', 'c', 'd', 'e']
-#     print(list(nltk.ngrams(test, 2)))
-#
-#
-#     cdef size_t next_pair = 0  # index of next pair to write
-#     cdef size_t i, j, k
-#     cdef uint32_t doc_len
-#
-#     for doc in text:
-#         cdoc = doc
-#         doc_len = cdoc.shape[0]
-#         for i in range(doc_len):
-#             if cdoc[i] == UINT32_MAX:
-#                 # OOV word
-#                 continue
-#             for j in range(i + 1, doc_len):
-#                 if cdoc[j] == UINT32_MAX:
-#                     # OOV word
-#                     continue
-#                 # take nsamples_per_word samples
-#                 # we ignore handling the case where sample is i or j, for now
-#                 for k in range(nsamples_per_word):
-#                     # sample j
-#                     pairs[next_pair, 0] = cdoc[i]
-#                     pairs[next_pair, 1] = cdoc[j]
-#                     pairs[next_pair, 2] = cdoc[i]
-#                     pairs[next_pair, 3] = randids[next_pair]
-#                     pairs[next_pair, 4] = 0
-#                     next_pair += 1
-#
-#                     # now sample i
-#                     pairs[next_pair, 0] = cdoc[i]
-#                     pairs[next_pair, 1] = cdoc[j]
-#                     pairs[next_pair, 2] = randids[next_pair]
-#                     pairs[next_pair, 3] = cdoc[j]
-#                     pairs[next_pair, 4] = 1
-#                     next_pair += 1
-#
-#         # samples with tokens word1~word2
-#         # tilda == ( ( id_of(`word1`), id_of(`word2`) ),
-#         #              id_of(`word1~word2`) )
-#         for tilda in tildas:
-#             # check if all tokens from `tilda[0]` are presented in `cdoc`
-#             res = 0
-#             for token in tilda[0]:
-#                 if token in cdoc:
-#                     res += 1
-#             if res == len(tilda[0]):
-#                 for i in range(doc_len):
-#                     if cdoc[i] == UINT32_MAX or (cdoc[i] in tilda[0]):
-#                         # OOV word
-#                         continue
-#                     for k in range(nsamples_per_word):
-#                         pairs[next_pair, 0] = tilda[1]  # id_of(`word1~word2`)
-#                         pairs[next_pair, 1] = cdoc[i]
-#                         pairs[next_pair, 2] = tilda[1]
-#                         pairs[next_pair, 3] = randids[next_pair]
-#                         pairs[next_pair, 4] = 0
-#                         next_pair += 1
-#
-#                         pairs[next_pair, 0] = tilda[1]  # id_of(`word1~word2`)
-#                         pairs[next_pair, 1] = cdoc[i]
-#                         pairs[next_pair, 2] = randids[next_pair]
-#                         pairs[next_pair, 3] = cdoc[i]
-#                         pairs[next_pair, 4] = 1
-#                         next_pair += 1
-#
-#     return np.ascontiguousarray(pairs[:next_pair, :])
+
+def get_context_by_index(index, list_, half_window_size=2):
+    left_wind = tuple(list_[max(0, index-half_window_size):index])
+    right_wind = tuple(list_[index+1:index+1+half_window_size])
+    return left_wind + right_wind
+
+
+def get_context_by_token(token, list_, half_window_size):
+    ans = ()
+    for index in indices(token, list_):
+        ans += get_context_by_index(index, list_, half_window_size)
+    return ans
+
+
+def get_contexts(tokens, list_, half_window_size=2):
+    ans = ()
+    for token in tokens:
+        ans += get_context_by_token(token, list_, half_window_size)
+    tmp = ()
+    for x in ans:
+        if x not in tokens:
+            tmp += (x,)
+    return tmp
+
 
 cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
     text, random_gen, ngram_id_of, uint32_t half_window_size=2,
     uint32_t nsamples_per_word=1, n=2):
+    '''
+    Take a chunk of text and turn it into a array of pairs for training.
+
+    The return array pairs is size (npairs, 5).
+    Each row is one training example.  The first two entries are the
+    token ids for the positive example and the second two entries
+    are the token ids for the negative example.  The final entry
+    is either 0 or 1 with encoding whether the left (0) or right (1)
+    id is the center word.  For example, this row:
+        [3, 122, 3, 910, 0]
+    means: word id's 3 and 122 occur in a context window, word ids 3 and 910
+    are the negative sample and the 0 signals word 3 is the center word.
+
+    text is a list of text documents / sentences.
+
+    Each element of the list is a numpy array of uint32_t IDs, with UINT32_MAX
+    signifying an OOV ID representing the document or sentence.
+
+    For position k in the document, uses all contexts from k - half_window_size
+    to k + half_window_size
+
+    random_gen = a callable that returns random IDs:
+        array of uint32_t length N with random IDs = random_gen(N)
+    nsamples_per_words = for each positive pair, sample this many negative
+        pairs
+    '''
     # calculate number of windows we need
     # for each token, take all positive indices in half_window_size
     # and take two samples from it (one for left token, one for right token)
     # for each nsamples_per_word.  Note that this includes full windows
     # for words at end, so it slightly overestimates number of pairs
     cdef long long npairs = sum(
-        [2 * len(doc) * (len(doc) + len(doc) - n + 1) * nsamples_per_word for doc in text]
+        [2 * nsamples_per_word * ((len(doc) * 3 * half_window_size) +
+         (len(list(itertools.permutations(doc, n))) * (2 * half_window_size * 6)))
+         for doc in text]
     )
 
     # allocate pairs and draw random numbers
@@ -1507,6 +1397,8 @@ cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
     for doc in text:
         cdoc = doc
         doc_len = cdoc.shape[0]
+
+        # samples for words
         for i in range(doc_len):
             if cdoc[i] == UINT32_MAX:
                 # OOV word
@@ -1534,6 +1426,7 @@ cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
                     pairs[next_pair, 4] = 1
                     next_pair += 1
 
+        # samples for ngrams
         for i in range(doc_len - n + 1):
             ngram = tuple(cdoc[i:i+n])
             ngram_id = ngram_id_of(ngram)
@@ -1541,7 +1434,7 @@ cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
                 # OOV ngram
                 continue
 
-            left_window = tuple(cdoc[i-half_window_size:i])
+            left_window = tuple(cdoc[max(0, i-half_window_size):i])
             right_window = tuple(cdoc[i+n:i+n+half_window_size])
 
             window_tokens = left_window + right_window
@@ -1565,5 +1458,33 @@ cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
                     pairs[next_pair, 3] = window_tokens[j]
                     pairs[next_pair, 4] = 1
                     next_pair += 1
+
+        # samples for tildas
+        for permut in list(itertools.permutations(cdoc, n)):
+            tilda_id = ngram_id_of(permut)
+            if tilda_id == -1:
+                # OOV tilda-token
+                continue
+
+            for token in get_contexts(permut, cdoc, half_window_size):
+                if token == UINT32_MAX:
+                    # OOV word
+                    continue
+
+                for k in range(nsamples_per_word):
+                    pairs[next_pair, 0] = tilda_id
+                    pairs[next_pair, 1] = token
+                    pairs[next_pair, 2] = tilda_id
+                    pairs[next_pair, 3] = randids[next_pair]
+                    pairs[next_pair, 4] = 0
+                    next_pair += 1
+
+                    pairs[next_pair, 0] = tilda_id
+                    pairs[next_pair, 1] = token
+                    pairs[next_pair, 2] = randids[next_pair]
+                    pairs[next_pair, 3] = token
+                    pairs[next_pair, 4] = 1
+                    next_pair += 1
+
 
     return np.ascontiguousarray(pairs[:next_pair, :])
