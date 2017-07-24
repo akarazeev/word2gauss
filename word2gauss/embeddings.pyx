@@ -1338,13 +1338,13 @@ def get_contexts(tokens, list_, half_window_size=2):
         result = ()
         for index in indices(token):
             result += get_context_by_index(index)
-        return ans
+        return result
 
     ans = ()
     for token in tokens:
         ans += get_context_by_token(token)
 
-    return tuple(filter(lambda x: x not in tokens, ans))
+    return tuple(set(filter(lambda x: x not in tokens, ans)))
 
 
 cpdef np.ndarray[uint32_t, ndim=2, mode='c'] text_to_pairs(
